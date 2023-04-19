@@ -1,0 +1,20 @@
+Dataset sources
+
+C19
+* comes from kaggle: https://www.kaggle.com/datasets/pranavraikokte/covid19-image-dataset
+* public License: https://creativecommons.org/licenses/by-sa/4.0/
+* https://www.kaggle.com/datasets/pranavraikokte/covid19-image-dataset
+
+
+xray - pneumonia
+* comes from kaggle: https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
+* public liscence: http://www.cell.com/cell/fulltext/S0092-8674(18)30154-5
+
+
+
+
+
+Dataset modifications
+* xray has been balanced such that there are equal count samples per label / class
+* both have been pruned randomly such that count(samples) mod 10 == 0
+   * did this so that there are no partial batches in training
