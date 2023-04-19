@@ -25,6 +25,10 @@ and highly variable.
    * this is mia tutorial but uses the kaggle data
    * RESULTS: were erratic also
 
-5. mode-mia_intro_image_class-cifar10.py
+4. mode-mia_intro_image_class-cifar10.py
    * This is #1, however instead of using kaggle data I've swapped in place edits for the tutorial script that use the cifar 10 datasets
    * I suspected that the batching, or the format of the import datasets in #1 was to blame for the mia results from #1
+
+5. [mia_intro_imageclassifier.py](mia_intro_imageclassifier.py)
+   * this is #1 but going to use either cifar or another off shelf dataset
+   * includes builder methods for model compilation
