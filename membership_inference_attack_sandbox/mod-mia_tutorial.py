@@ -225,6 +225,8 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
         # prob_test = special.softmax(logits_test, axis=1)
         #### OLD CODE HERE
 
+        # train_label = np.concatenate([y for x, y in train_ds], axis=0)
+        # test_label = np.concatenate([y for x, y in val_ds], axis=0)
         ### NEW CODE HERE
         logits_train = self.model.predict(train_ds, batch_size=batch_size)  # TODO - check if batch size here is needed
         logits_test = self.model.predict(val_ds, batch_size=batch_size)
@@ -245,8 +247,12 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
 
         attack_results = mia.run_attacks(
             AttackInputData(
-                labels_train=y_train_indices[:, 0],
-                labels_test=y_test_indices[:, 0],
+                # TODO - figure out which of these lends itself better to running the MIA.
+                #  Tried both, both give odd results
+                # labels_train=y_train_indices[:, 0],
+                # labels_test=y_test_indices[:, 0],
+                labels_train=train_label,
+                labels_test=test_label,
                 probs_train=prob_train,
                 probs_test=prob_test
             ),
