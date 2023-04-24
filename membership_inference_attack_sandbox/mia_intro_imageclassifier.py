@@ -142,27 +142,27 @@ def dense_nn_builder(input_shape: Tuple[int],
     )
     return model
 
-def conv_nn_builder(dataset: int,
-                    num_classes: int,
-                    neurons_per_layer: int = 64,
-                    depth: int,
-                    activation: str = 'relu',
-                    ) -> tf.keras.models.Sequential:
-    """Build a conv2d model of arbitrary depth
+def dataset_builder(dataset: dict,
+                    num_classes: int = 10,
+                    ) -> int:
+    """Build that datasets for use in model training and testing from an input dataset dictionary
 
     Args:
-        input_shape: Integer tuple, shape of a sample image. e.g. (64,64,3)
-        num_classes: Output, number of classes
-        neurons_per_layer: number of neurons in each layer. Default 64 neurons
-        depth: Depth of conv2D neural net
-        activation: The activation function to use for conv and dense layers. Default RELU
+        dataset: dict,
+        num_classes: int = 10,
     Returns:
-        TF.Keras model with the parameters passed to this nn builder method
-    Static Values
-        the filter size for each conv2D is not parameterized
+        TBD
     """
 
-    return model
+    # logic to gate class shortening
+    t = np.unique(y_train_indices) # returns ([0,1,2,3,...])
+    t.size # returns 10
+    # may not be needed - in a for (i) in (num_classes - t.size):
+    # will not run at all
+    # TODO figure this out
+
+
+    return xyz
 
 
 

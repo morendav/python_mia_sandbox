@@ -198,6 +198,10 @@ class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
 ### MODIFYING THE DATASETS
 ### MODIFYING THE DATASETS
 ### MODIFYING THE DATASETS
+# This block of code will take dataset from M classes (10) to make a smaller dataset of N classes (3)
+# Nothing fancy for picking the N of M, just picking the first three classes (0,1,2)
+# This scrappy version does not duplicate the class-shortner + shuffling for test and train, instead only handles
+# train dataset and then assigns 1/3 to test and 2/3 to train datasets
 # ## PLOT THE PRE-Shuffled and modded dataset
 # plt.figure(figsize=(10, 10))
 # for i in range(25):
