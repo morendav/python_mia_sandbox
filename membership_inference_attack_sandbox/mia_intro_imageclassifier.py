@@ -1,6 +1,8 @@
 """
 Introduction to Membership Inference Attack - Privacy testing for ML Models
-Version 2.1 (see mia sandbox > ... > mia_intro_image_class.py for original WIP version
+Version 2.1
+    * see mia sandbox > ... > mia_intro_image_class.py for original WIP version
+    * improvements over 1.1 (WIP) include builder methods, and a method to slice training data into M of N classes
 
 This intro will go over building two image classification models with different architectures
 Perform MIA tests on both models every N epochs.
@@ -8,13 +10,12 @@ Both models are trained over enough epochs to demonstrate overfitting
 
 The expected result should show:
 1. Models overfit as the number of epochs increases
-2. Different models, with different archiectures and different capacities, overfit at different rates
+2. Different models, with different architectures and different capacities, overfit at different rates
 3. Overfitting is a proxy for model memorization, which should show that MIA analysis
 shows greater attacker advantage for over fit models
 
 This script assumes the source data is located relative to the script as it is in the github repo
 Note: a few #todo: for time-of-execution improvements
-
 
 Copyright (c) 2023, d.l.moreno
 All rights reserved.
@@ -22,6 +23,10 @@ All rights reserved.
 This source code is licensed under the Apache v2 license found in the
 LICENSE file in the root directory of this source tree.
 """
+
+
+
+
 
 # Standard & third party libraries
 import matplotlib.pyplot as plt
@@ -40,7 +45,7 @@ from tensorflow.keras.applications.vgg19 import preprocess_input
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Model
 
-import tensorflow_datasets as tfds
+import tensorflow_datasets as tf_datasets
 
 
 import tensorflow_privacy
@@ -63,16 +68,18 @@ from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import
 # their characteristics (e.g. depth, number of convolutions, etc)
 def conv_nn_builder(input_shape: Tuple[int],
                     num_classes: int,
+                    neurons_per_layer: int = 64,
                     depth: int,
-                    activation: str,
+                    activation: str = 'relu',
                     ) -> tf.keras.models.Sequential:
     """Build a conv2d model of arbitrary depth
 
     Args:
         input_shape: Integer tuple, shape of a sample image. e.g. (64,64,3)
         num_classes: Output, number of classes
+        neurons_per_layer: number of neurons in each layer. Default 64 neurons
         depth: Depth of conv2D neural net
-        activation: The activation function to use for conv and dense layers.
+        activation: The activation function to use for conv and dense layers. Default RELU
     Returns:
         TF.Keras model with the parameters passed to this nn builder method
     Static Values
@@ -89,8 +96,9 @@ def conv_nn_builder(input_shape: Tuple[int],
 
     # flatten the conv2 layers in a single vector representation
     model.add(layers.Flatten())
-    model.add(layers.Dense(32, activation=activation))  # apply a single layer of densely connected NN
-    model.add(layers.Dense(num_classes))  # logits must equal number of class in prediciton space
+    # apply a single layer of densely connected neurons_per_layer neurons, default 64 unless specified at method call
+    model.add(layers.Dense(neurons_per_layer, activation=activation))
+    model.add(layers.Dense(num_classes))  # logits must equal number of class in prediction space
     # compile the model using some plain
     model.compile(
         # Depending on the format of the labels numpy array (N:1, or 1:N) you will have to swap these definitions
@@ -102,32 +110,29 @@ def conv_nn_builder(input_shape: Tuple[int],
     return model
 def dense_nn_builder(input_shape: Tuple[int],
                     num_classes: int,
+                    neurons_per_layer: int = 64,
                     depth: int,
-                    activation: str,
+                    activation: str = 'relu',
                     ) -> tf.keras.models.Sequential:
     """Build a densely connected NN model of arbitrary depth
 
     Args:
         input_shape: Integer tuple, shape of a sample image. e.g. (64,64,3)
         num_classes: Output, number of classes
-        num_conv: Depth of conv2D neural net
-        activation: The activation function to use for conv and dense layers.
+        neurons_per_layer: number of neurons in each layer. Default 64 neurons
+        depth: Depth of densely connected neural networks
+        activation: The activation function to use for conv and dense layers. Default RELU
     Returns:
         TF.Keras model with the parameters passed to this nn builder method
-    Static Values
-        number neurons per dense layer is not parameterized
     """
     model = Sequential()
     model.add(layers.Flatten(input_shape=input_shape))
 
-    # loop to create some arbitrarily deep set of conv2d layers
-    # depth is specified in the passed parameters for this builder method
+    # loop to create hidden layers of model of arbitrary depth
+    # each layer has neurons_per_layer neurons, which is default 64 unless specified at method call
     for _ in range(depth):
-        model.add(layers.Dense(neurons, activation=activation))
-    # flatten the conv2 layers in a single vector representation
-    model.add(layers.Flatten())
-    model.add(layers.Dense(32, activation=activation))  # apply a single layer of densely connected NN
-    model.add(layers.Dense(num_classes))  # logits must equal number of class in prediciton space
+        model.add(layers.Dense(neurons_per_layer, activation=activation))
+    model.add(layers.Dense(num_classes))  # logits must equal number of class in prediction space
     model.compile(
         # Depending on the format of the labels numpy array (N:1, or 1:N) you will have to swap these definitions
         # loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
@@ -135,6 +140,28 @@ def dense_nn_builder(input_shape: Tuple[int],
         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
         metrics=['accuracy']
     )
+    return model
+
+def conv_nn_builder(dataset: int,
+                    num_classes: int,
+                    neurons_per_layer: int = 64,
+                    depth: int,
+                    activation: str = 'relu',
+                    ) -> tf.keras.models.Sequential:
+    """Build a conv2d model of arbitrary depth
+
+    Args:
+        input_shape: Integer tuple, shape of a sample image. e.g. (64,64,3)
+        num_classes: Output, number of classes
+        neurons_per_layer: number of neurons in each layer. Default 64 neurons
+        depth: Depth of conv2D neural net
+        activation: The activation function to use for conv and dense layers. Default RELU
+    Returns:
+        TF.Keras model with the parameters passed to this nn builder method
+    Static Values
+        the filter size for each conv2D is not parameterized
+    """
+
     return model
 
 
@@ -208,71 +235,38 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
 
 if __name__ == '__main__':
 
-    # Initialize variables & configure some hardcoded values
-    # NOTE: assumes data file directory relative position not changed from git repo
-    # current_directory = os.getcwd()
-    current_directory = Path(os.path.dirname(os.path.abspath(__file__)))
-    # data_directory = current_directory / 'data/c19_dataset/'  # this was used for the covid dataset
-    data_directory = current_directory / 'data/chest_xray/'  # this was used for the covid dataset
-    data_directory_training = data_directory / "train/"
-    data_directory_test = data_directory / "test/"
+    # Init Var
     all_reports = []  # init an empty array that will store the privacy attack results
-
-    # define model hyperparameters
     batch_size = 50  # usually one of 32, 64, 128, ...
-    img_height = 128  # original size 224, scaled to x
-    img_width = 128
     epochs = 16
     epochs_per_report = 5  # how often should the privacy attacks be performed
     learning_rate = 0.001
-    data_split = 0.3115  # percent split that will go to validation dataset.
-    # NOTE: data_split must be configured so there are no partial batches
-
-    # # import data and split between training and validation datasets
-    # # parameterized values defined as hyperparameters
-    # # seed value randomizes the distribution between training and validation at import time
-    # train_ds = tf.keras.utils.image_dataset_from_directory(
-    #     data_directory_training,
-    #     validation_split=data_split,
-    #     subset="training",
-    #     seed=33,
-    #     image_size=(img_height, img_width),
-    #     batch_size=batch_size,
-    # )
-    # val_ds = tf.keras.utils.image_dataset_from_directory(
-    #     data_directory_training,
-    #     validation_split=data_split,
-    #     subset="validation",
-    #     seed=33,
-    #     image_size=(img_height, img_width),
-    #     batch_size=batch_size,
-    # )
 
 
-
-
-
-
-
-
-    # NEW DATA - loading in CIFAR and replacing all used data pointers with CIFAR10 dataset
-    # NEW DATA - loading in CIFAR and replacing all used data pointers with CIFAR10 dataset
-    # NEW DATA - loading in CIFAR and replacing all used data pointers with CIFAR10 dataset
+    # load dataset: CIFAR, from tensorflow datasets library
     dataset = 'cifar10'
     num_classes = 10
-
-    train_ds = tfds.as_numpy(
-        tfds.load(dataset, split=tfds.Split.TRAIN, batch_size=-1))
-    test_ds = tfds.as_numpy(
-        tfds.load(dataset, split=tfds.Split.TEST, batch_size=-1))
-    # extract images and labels from imported data
-    # note that the datasets are already rescaled
+    # CIFAR as numpy dict datatype, with three keys (id, iamge, label)
+    # TF datasets come presplit, in this case CIFAR has 10k, 50k validation, test split
+    train_ds = tf_datasets.as_numpy(
+        tf_datasets.load(
+            dataset,
+            split=tf_datasets.Split.TRAIN,
+            batch_size=-1,
+        )
+    )
+    test_ds = tf_datasets.as_numpy(
+        tf_datasets.load(
+            dataset,
+            split=tf_datasets.Split.TEST,
+            batch_size=-1
+        )
+    )
+    # extract images and labels from imported data, rescale them to support model convergence
     x_train = train_ds['image'].astype('float32') / 255.
-    # x_train = train_ds['image'].astype('float32')
-    y_train_indices = train_ds['label'][:, np.newaxis]
     x_test = test_ds['image'].astype('float32') / 255.
-    # x_test = test_ds['image'].astype('float32')
     y_test_indices = test_ds['label'][:, np.newaxis]
+    y_train_indices = train_ds['label'][:, np.newaxis]
 
     # Convert class vectors to binary class matrices.
     # this is only used during the model fit method by keras

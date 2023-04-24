@@ -7,7 +7,7 @@ Datasets
 
 Codebase 
 
-1. mia_intro_image_class.py
+1. [wip-mia_intro_image_class.py](wip-mia_intro_image_class.py)
    * MIA using a custom dataset (from dataset dir)
    * runs MIA as a callback during model training
    * two models are built and tested at some parameterized frequency (each_epoch)
@@ -17,15 +17,15 @@ I would expect this to contribute to a growing attacker advantage in MIA results
 and highly variable.
 
 
-2. mia_tutorial.py
+2. [mia_tutorial.py](mia_tutorial.py)
    * this uses similar methods to #1, but uses an out of the box dataset (cifar)
    * tracks very closely with the MIA tutorial on tensorflow privacy, possibly minor edits in place
 
-3. mod-mia_tutorial.py
+3. [mod-mia_tutorial.py](mod-mia_tutorial.py)
    * this is mia tutorial but uses the kaggle data
    * RESULTS: were erratic also
 
-4. mode-mia_intro_image_class-cifar10.py
+4. [mod-mia_intro_image_class_cifar10.py](mod-mia_intro_image_class_cifar10.py)
    * This is #1, however instead of using kaggle data I've swapped in place edits for the tutorial script that use the cifar 10 datasets
    * I suspected that the batching, or the format of the import datasets in #1 was to blame for the mia results from #1
 
