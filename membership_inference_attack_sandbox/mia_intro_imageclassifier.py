@@ -23,15 +23,14 @@ All rights reserved.
 This source code is licensed under the Apache v2 license found in the
 LICENSE file in the root directory of this source tree.
 """
-
-
-
-
+from typing import Tuple, Union, Any
 
 # Standard & third party libraries
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+
+from numpy import ndarray
 from scipy import special
 from pathlib import Path
 
@@ -108,6 +107,7 @@ def conv_nn_builder(input_shape: Tuple[int],
         metrics=['accuracy']
     )
     return model
+
 def dense_nn_builder(input_shape: Tuple[int],
                     num_classes: int,
                     neurons_per_layer: int = 64,
@@ -142,9 +142,11 @@ def dense_nn_builder(input_shape: Tuple[int],
     )
     return model
 
+# TODO dont be lazy about returned datatypes here, come back to this later
 def dataset_builder(dataset: dict,
                     num_classes: int = 10,
-                    ) -> int:
+                    ):
+                    # ) -> tuple[Union[float, Any], Any, Any]:
     """Build that datasets for use in model training and testing from an input dataset dictionary
 
     Args:
@@ -154,16 +156,67 @@ def dataset_builder(dataset: dict,
         TBD
     """
 
-    # logic to gate class shortening
-    t = np.unique(y_train_indices) # returns ([0,1,2,3,...])
-    t.size # returns 10
-    # may not be needed - in a for (i) in (num_classes - t.size):
-    # will not run at all
-    # TODO figure this out
 
+    # preprocess dataset and extract dataset input, labels, and create a sparse vector
+    # representation of the labels for training
+    # First, preprocess the images into float typed entries, rescale to support model convergence
+    ds_images = dataset['image'].astype('float32') / 255.
+    # extract labels from dataset
+    ds_labels = dataset['label'][:, np.newaxis]
+    # create vector per image representing a sparse vector with a 1 value at the index for the label
+    ds_labels_training_vector = tf.keras.utils.to_categorical(y_train_indices, num_classes)
 
-    return xyz
+    # logic to gate dataset truncation conditionally on whether the passed parameter is not equal to the number
+    # of classes the dataset already has
+    classes_in_labels = np.unique(dataset['label'])
+    if num_classes != classes_in_labels:
+        new_truncated_dataset = []
+        new_truncated_labels = []
 
+        # truncate the dataset and labels arrays.
+        # NOTE: this is a lazy truncation, the first classes that appear numerically are chosen before later classes
+        # e.g. going from 10 to 2 classes means class 0 and 1 make the final cut, it's not random
+        for i in range(num_classes):
+            indices_for_i_class = np.where(ds_labels == i)[0]  # indices for the i'th class from the labels array
+            # first dimension is the index for the LxWxD image
+            # e.g. a 64x64x3 image is size 64x64 with 3 color channels
+            images_for_i_class = ds_images[(indices_for_i_class), :, :, :]
+            labels_for_i_class = y_train_indices[indices_for_i_class]  # only label values for the current index
+
+            # append to a growing dataset and labels array
+            new_truncated_dataset = np.concatenate((new_truncated_dataset, images_for_i_class))
+            new_truncated_labels = np.concatenate((new_truncated_labels, labels_for_i_class))
+
+        # after the new dataset and labels truncated arrays are created they must be shuffled
+        # if they are not shuffled then the model will skew towards the first class since all examples
+        # it learns in the first passes are of class 0
+        ds_images, ds_labels = unison_shuffle_arrays(
+            new_truncated_dataset,
+            new_truncated_labels,
+        )
+        ds_labels_training_vector = tf.keras.utils.to_categorical(y_train_indices, num_classes)
+
+    return ds_images, ds_labels, ds_labels_training_vector
+
+def unison_shuffle_arrays(a, b):
+    """Shuffle two arrays of equal depth
+    Used to shuffle dataset and label vectors after truncation, note that both dataset and labels *must be shuffled
+    in unison* meaning that an element X from dataset and Y from labels must be shuffled to the same new positions within
+    their respective datasets
+    This helper method to dataset builder method
+
+    Args:
+        a: array,
+        b: array,
+    Returns:
+        unison shuffled array
+    """
+    # check length match for input arrays
+    assert len(a) == len(b)
+    # create a random shuffling
+    p = np.random.permutation(len(a))
+    # return co-shuffled arrays a, b
+    return a[p], b[p]
 
 
 class PrivacyMetrics(tf.keras.callbacks.Callback):
@@ -243,9 +296,11 @@ if __name__ == '__main__':
     learning_rate = 0.001
 
 
-    # load dataset: CIFAR, from tensorflow datasets library
+    # Init dataset metadata
     dataset = 'cifar10'
     num_classes = 10
+    class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+
     # CIFAR as numpy dict datatype, with three keys (id, iamge, label)
     # TF datasets come presplit, in this case CIFAR has 10k, 50k validation, test split
     train_ds = tf_datasets.as_numpy(

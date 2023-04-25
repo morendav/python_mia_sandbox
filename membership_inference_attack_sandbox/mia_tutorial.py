@@ -38,7 +38,7 @@ num_classes = 10
 activation = 'relu'
 num_conv = 3
 batch_size = 20
-epochs_per_report = 5
+epochs_per_report = 3
 total_epochs = 16
 lr = 0.001
 all_reports = []
@@ -77,6 +77,7 @@ def small_cnn(input_shape: Tuple[int],
     model.add(tf.keras.layers.Dense(num_classes))
 
     model.compile(
+        # loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(learning_rate=lr),
         metrics=['accuracy']
@@ -352,10 +353,12 @@ model_3layers = small_cnn(
 callback = PrivacyMetrics(epochs_per_report, "2 Layers")
 history = model_2layers.fit(
     x_train,
+    # y_train_indices,
     y_train,
     batch_size=batch_size,
     epochs=total_epochs,
     validation_data=(x_test, y_test),
+    # validation_data=(x_test, y_test_indices),
     callbacks=[callback],
     shuffle=True)
 all_reports.extend(callback.attack_results)
