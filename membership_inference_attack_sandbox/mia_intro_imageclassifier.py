@@ -67,10 +67,9 @@ from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import
 # their characteristics (e.g. depth, number of convolutions, etc)
 def conv_nn_builder(input_shape: Tuple[int],
                     num_classes: int,
-                    neurons_per_layer: int = 64,
                     depth: int,
-                    activation: str = 'relu',
-                    ) -> tf.keras.models.Sequential:
+                    neurons_per_layer: int = 64,
+                    activation: str = 'relu') -> tf.keras.models.Sequential:
     """Build a conv2d model of arbitrary depth
 
     Args:
@@ -80,7 +79,7 @@ def conv_nn_builder(input_shape: Tuple[int],
         depth: Depth of conv2D neural net
         activation: The activation function to use for conv and dense layers. Default RELU
     Returns:
-        TF.Keras model with the parameters passed to this nn builder method
+        TF.Keras compiled model with the parameters passed to this nn builder method
     Static Values
         the filter size for each conv2D is not parameterized
     """
@@ -101,8 +100,8 @@ def conv_nn_builder(input_shape: Tuple[int],
     # compile the model using some plain
     model.compile(
         # Depending on the format of the labels numpy array (N:1, or 1:N) you will have to swap these definitions
-        # loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
+        # loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
         metrics=['accuracy']
     )
@@ -110,8 +109,8 @@ def conv_nn_builder(input_shape: Tuple[int],
 
 def dense_nn_builder(input_shape: Tuple[int],
                     num_classes: int,
-                    neurons_per_layer: int = 64,
                     depth: int,
+                    neurons_per_layer: int = 64,
                     activation: str = 'relu',
                     ) -> tf.keras.models.Sequential:
     """Build a densely connected NN model of arbitrary depth
@@ -123,7 +122,7 @@ def dense_nn_builder(input_shape: Tuple[int],
         depth: Depth of densely connected neural networks
         activation: The activation function to use for conv and dense layers. Default RELU
     Returns:
-        TF.Keras model with the parameters passed to this nn builder method
+        TF.Keras compiled model with the parameters passed to this nn builder method
     """
     model = Sequential()
     model.add(layers.Flatten(input_shape=input_shape))
@@ -135,8 +134,8 @@ def dense_nn_builder(input_shape: Tuple[int],
     model.add(layers.Dense(num_classes))  # logits must equal number of class in prediction space
     model.compile(
         # Depending on the format of the labels numpy array (N:1, or 1:N) you will have to swap these definitions
-        # loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
+        # loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
         metrics=['accuracy']
     )
@@ -153,7 +152,9 @@ def dataset_builder(dataset: dict,
         dataset: dict,
         num_classes: int = 10,
     Returns:
-        TBD
+        ds_images images in dataset
+        ds_labels labels of images in dataset
+        ds_labels_training_vector sparse representation of the labels, length number of classes, with 1 nonzero entry
     """
 
 
@@ -163,13 +164,11 @@ def dataset_builder(dataset: dict,
     ds_images = dataset['image'].astype('float32') / 255.
     # extract labels from dataset
     ds_labels = dataset['label'][:, np.newaxis]
-    # create vector per image representing a sparse vector with a 1 value at the index for the label
-    ds_labels_training_vector = tf.keras.utils.to_categorical(y_train_indices, num_classes)
+
 
     # logic to gate dataset truncation conditionally on whether the passed parameter is not equal to the number
     # of classes the dataset already has
-    classes_in_labels = np.unique(dataset['label'])
-    if num_classes != classes_in_labels:
+    if num_classes != np.unique(dataset['label']).size:
         new_truncated_dataset = []
         new_truncated_labels = []
 
@@ -181,11 +180,15 @@ def dataset_builder(dataset: dict,
             # first dimension is the index for the LxWxD image
             # e.g. a 64x64x3 image is size 64x64 with 3 color channels
             images_for_i_class = ds_images[(indices_for_i_class), :, :, :]
-            labels_for_i_class = y_train_indices[indices_for_i_class]  # only label values for the current index
+            labels_for_i_class = ds_labels[indices_for_i_class]  # only label values for the current index
 
             # append to a growing dataset and labels array
-            new_truncated_dataset = np.concatenate((new_truncated_dataset, images_for_i_class))
-            new_truncated_labels = np.concatenate((new_truncated_labels, labels_for_i_class))
+            if i != 0:
+                new_truncated_dataset = np.concatenate((new_truncated_dataset, images_for_i_class))
+                new_truncated_labels = np.concatenate((new_truncated_labels, labels_for_i_class))
+            else:
+                new_truncated_dataset = images_for_i_class
+                new_truncated_labels = labels_for_i_class
 
         # after the new dataset and labels truncated arrays are created they must be shuffled
         # if they are not shuffled then the model will skew towards the first class since all examples
@@ -194,7 +197,8 @@ def dataset_builder(dataset: dict,
             new_truncated_dataset,
             new_truncated_labels,
         )
-        ds_labels_training_vector = tf.keras.utils.to_categorical(y_train_indices, num_classes)
+    # create vector per image representing a sparse vector with a 1 value at the index for the label
+    ds_labels_training_vector = tf.keras.utils.to_categorical(ds_labels, num_classes)
 
     return ds_images, ds_labels, ds_labels_training_vector
 
@@ -291,8 +295,8 @@ if __name__ == '__main__':
     # Init Var
     all_reports = []  # init an empty array that will store the privacy attack results
     batch_size = 50  # usually one of 32, 64, 128, ...
-    epochs = 16
-    epochs_per_report = 5  # how often should the privacy attacks be performed
+    epochs = 3
+    epochs_per_report = 2  # how often should the privacy attacks be performed
     learning_rate = 0.001
 
 
@@ -301,7 +305,8 @@ if __name__ == '__main__':
     num_classes = 10
     class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
-    # CIFAR as numpy dict datatype, with three keys (id, iamge, label)
+
+    # CIFAR as numpy dict datatype, with three keys (id, image, label)
     # TF datasets come presplit, in this case CIFAR has 10k, 50k validation, test split
     train_ds = tf_datasets.as_numpy(
         tf_datasets.load(
@@ -310,116 +315,95 @@ if __name__ == '__main__':
             batch_size=-1,
         )
     )
-    test_ds = tf_datasets.as_numpy(
+    validation_ds = tf_datasets.as_numpy(
         tf_datasets.load(
             dataset,
             split=tf_datasets.Split.TEST,
             batch_size=-1
         )
     )
-    # extract images and labels from imported data, rescale them to support model convergence
-    x_train = train_ds['image'].astype('float32') / 255.
-    x_test = test_ds['image'].astype('float32') / 255.
-    y_test_indices = test_ds['label'][:, np.newaxis]
-    y_train_indices = train_ds['label'][:, np.newaxis]
-
-    # Convert class vectors to binary class matrices.
-    # this is only used during the model fit method by keras
-    y_train = tf.keras.utils.to_categorical(y_train_indices, num_classes)
-    y_test = tf.keras.utils.to_categorical(y_test_indices, num_classes)
-    # used in the CNN creator method
-    input_shape = x_train.shape[1:]
-    # mia doesn't support partial batch handling, so this checks if there are any partial batches. otherwise unused
-    assert x_train.shape[0] % batch_size == 0, "The tensorflow_privacy optimizer doesn't handle partial batches"
-
-    # class names for cifar dataset
-    class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
-                   'dog', 'frog', 'horse', 'ship', 'truck']
-
-    num_classes = len(class_names)
-    # NEW DATA - loading in CIFAR and replacing all used data pointers with CIFAR10 dataset
-    # NEW DATA - loading in CIFAR and replacing all used data pointers with CIFAR10 dataset
-    # NEW DATA - loading in CIFAR and replacing all used data pointers with CIFAR10 dataset
 
 
-
-
-
-
-
-
-    # CONTINUE MIA CODE NOW
-    # Build models
-    # This model is a repeated set of 2D convolutions with various filter sizes
-    # Filter size is chosen arbitrarily, these are not tuned parameters by any means
-    # TODO There is probably a clever way to scale the batched images before building the models
-    model_repeated_conv2d = Sequential([
-        layers.Input(shape=input_shape),
-        # layers.Conv2D(16, 3, padding='same', activation='relu'),
-        layers.Conv2D(32, (3, 3), activation='relu'),
-        layers.MaxPooling2D(),
-        layers.Conv2D(32, (3, 3), activation='relu'),
-        layers.MaxPooling2D(),
-        # layers.Conv2D(32, 3, padding='same', activation='relu'),
-        # layers.MaxPooling2D(),
-        layers.Flatten(),
-        layers.Dense(64, activation='relu'),
-        layers.Dense(num_classes),  # final layer must be the number of classes
-    ])
-    # NOTE ON CONV2D Model: originally the results were misleading, required tuning hyperparameters
-    # learnings: keeping images unscaled used more compute and the number of parameters was high (25M vs 1M parameters)
-    # a val-training dataset split ~0.2 resulted in hitting 98%+ validation accuracy quickly
-    # there isn't enough data in this dataset to overfit it and test it against overfitting, having too little
-    # validation data meant that validation accuracy was more volatile. Dialing down validation split to 0.45
-    # demonstrated overfitting better for this demo
-
-    # This model is a repeated, fully connected set of hidden neuron layers
-    # Three in total, the number of neurons per layer is completely arbitrary also, the goal of is this demo is to
-    # demonstrate overfit models so I think having higher capacity here is good
-    # anything over 64 is likely enough, scale to your compute resources
-    model_dense_layers = Sequential([
-        layers.Rescaling(1. / 255, input_shape=(input_shape)),
-        layers.Flatten(input_shape=(img_height, img_width, 3)),
-        layers.Dense(128, activation='relu'),
-        layers.Dense(128, activation='relu'),
-        layers.Dense(128, activation='relu'),
-        layers.Dense(num_classes),
-    ])
-
-    # Compile Models
-    model_repeated_conv2d.compile(
-        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
-        # loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-        metrics=['accuracy'],
+    # Create training and test datasets with 10 (default number) of classes
+    # use the dataset_builder helper method to create the training and validation datasets
+    train_10_x, train_10_y_indices, train_10_y = dataset_builder(
+        dataset=train_ds,
     )
-    model_dense_layers.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
-        # loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-        metrics=['accuracy'],
+    validation_10_x, validation_10_y_indices, validation_10_y = dataset_builder(
+        dataset=validation_ds,
+    )
+    # Create training and test datasets with 4 classes
+    train_4_x, train_4_y_indices, train_4_y = dataset_builder(
+        dataset=train_ds,
+        num_classes=4,
+    )
+    validation_4_x, validation_4_y_indices, validation_4_y = dataset_builder(
+        dataset=train_ds,
+        num_classes=4,
     )
 
-    # report model stats
-    print(f'\n\nModel stats for 2d-convolutional model:  \n')
-    model_repeated_conv2d.summary()
-    print(f'\n\nModel stats for multi-layer densely connected NN:  \n')
-    model_dense_layers.summary()
-    print(f'\n\n')
+    # validate that the 10class and 4class datasets will not leave any partial batches
+    # MIA tensorflow privacy library does not handle partial batches
+    assert train_10_x.shape[0] % batch_size == 0, "10Class partial batch, error in tensorflow_privacy optimizer"
+    assert train_4_x.shape[0] % batch_size == 0, "4Class partial batch, error in tensorflow_privacy optimizer"
+
+
+    # Generate the compiled models
+    # First, generate two different types of models to compare MIA across model types
+    # these models serve as the baseline for comparison
+    conv_3layer_10label = conv_nn_builder(
+        input_shape=train_10_x.shape[1:],
+        num_classes=10,
+        neurons_per_layer=32,
+        depth=3,
+        activation='relu',
+    )
+    dense_3layer_10label = dense_nn_builder(
+        input_shape=train_10_x.shape[1:],
+        num_classes=10,
+        neurons_per_layer=32,
+        depth=3,
+        activation='relu',
+    )
+    # Next, define an additional densely connected neural network that is much deeper for comparison
+    dense_6layer_10label = dense_nn_builder(
+        input_shape=train_10_x.shape[1:],
+        num_classes=10,
+        neurons_per_layer=32,
+        depth=9,
+        activation='relu',
+    )
+    # Finally, recreate the baseline models that will fit to the three class dataset
+    conv_3layer_4label = conv_nn_builder(
+        input_shape=train_10_x.shape[1:],
+        num_classes=4,
+        neurons_per_layer=32,
+        depth=3,
+        activation='relu',
+    )
+    dense_3layer_4label = dense_nn_builder(
+        input_shape=train_10_x.shape[1:],
+        num_classes=4,
+        neurons_per_layer=32,
+        depth=3,
+        activation='relu',
+    )
+
+
 
     # Train Models and run privacy attacks per model
     # call the privacy metrics class as a per training epoch callback
     # Train & Test: Repeated Conv2D
     callback = PrivacyMetrics(
         epochs_per_report,  # parameter that signals how often the privacy attacks should be run on the model
-        "model_repeated_conv2d"  # model codename internally
+        "test"  # model codename internally
     )
     # write results of model fit (i.e. training) to var(history)
-    history_model_repeated_conv2d = model_repeated_conv2d.fit(
-        x_train,
-        y_train,
+    history_model_repeated_conv2d = conv_3layer_10label.fit(
+        train_10_x,
+        train_10_y,
         batch_size=batch_size,
-        validation_data=(x_test, y_test),
+        validation_data=(validation_10_x, validation_10_y),
         epochs=epochs,
         callbacks=[callback],
     )
