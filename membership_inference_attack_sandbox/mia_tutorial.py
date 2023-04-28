@@ -32,17 +32,6 @@ from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_s
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import privacy_report
 
 
-# Init Parameters
-dataset = 'cifar10'
-num_classes = 10
-activation = 'relu'
-num_conv = 3
-batch_size = 20
-epochs_per_report = 3
-total_epochs = 16
-lr = 0.001
-all_reports = []
-
 
 
 
@@ -154,6 +143,19 @@ def unison_shuffled_copies(a, b):
 
 
 
+# Init Parameters
+dataset = 'cifar10'
+num_classes = 10
+activation = 'relu'
+num_conv = 3
+batch_size = 50
+epochs_per_report = 2
+total_epochs = 3
+lr = 0.001
+all_reports = []
+
+
+
 '''
 LOADING THE DATASET
 
@@ -195,15 +197,71 @@ class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
 
 
 
-
-### MODIFYING THE DATASETS
-### MODIFYING THE DATASETS
-### MODIFYING THE DATASETS
-# This block of code will take dataset from M classes (10) to make a smaller dataset of N classes (3)
-# Nothing fancy for picking the N of M, just picking the first three classes (0,1,2)
-# This scrappy version does not duplicate the class-shortner + shuffling for test and train, instead only handles
-# train dataset and then assigns 1/3 to test and 2/3 to train datasets
-# ## PLOT THE PRE-Shuffled and modded dataset
+#
+# ### MODIFYING THE DATASETS
+# ### MODIFYING THE DATASETS
+# ### MODIFYING THE DATASETS
+# # This block of code will take dataset from M classes (10) to make a smaller dataset of N classes (3)
+# # Nothing fancy for picking the N of M, just picking the first three classes (0,1,2)
+# # This scrappy version does not duplicate the class-shortner + shuffling for test and train, instead only handles
+# # train dataset and then assigns 1/3 to test and 2/3 to train datasets
+# # ## PLOT THE PRE-Shuffled and modded dataset
+# # plt.figure(figsize=(10, 10))
+# # for i in range(25):
+# #     plt.subplot(5, 5, i + 1)
+# #     plt.xticks([])
+# #     plt.yticks([])
+# #     plt.grid(False)
+# #     plt.imshow(x_train[i])
+# #     # The CIFAR labels happen to be arrays,
+# #     # which is why you need the extra index
+# #     plt.xlabel(class_names[y_train_indices[i][0]])
+# # plt.show()
+# # NEW CODE - SELECT ONLY SOME LABELS
+# num_classes = 3
+# # hypothesis: fewer classes makes the MIA test more variable
+# train_ind_0 = np.where(y_train_indices == 0)[0]
+# train_ind_1 = np.where(y_train_indices == 1)[0]
+# train_ind_2 = np.where(y_train_indices == 2)[0]
+# # pull out input data using indices for classes defined above.
+# # we will discard the validation dataset all together for now
+# x_0 = x_train[(train_ind_0), :, :, :]
+# x_1 = x_train[(train_ind_1), :, :, :]
+# x_2 = x_train[(train_ind_2), :, :, :]
+# # pull out labels from the training dataset for the classes we will use only
+# train_label_0 = y_train_indices[train_ind_0]
+# train_label_1 = y_train_indices[train_ind_1]
+# train_label_2 = y_train_indices[train_ind_2]
+# # concatenate only the three classes of CIFAR we will use
+# new_data_3classes = np.concatenate((x_0, x_1, x_2))
+# new_data_labels_3classes = np.concatenate((train_label_0, train_label_1, train_label_2))
+#
+# shuffled_new_data_3classes, shuffled_new_data_labels_3classes = unison_shuffled_copies(new_data_3classes,
+#                                                                                        new_data_labels_3classes)
+# # Update variables used in rest of program to point to new 3class dataset
+# # there are 5000 examples of each class, there are now three classes meaning we have 15,000 images.
+# x_train = shuffled_new_data_3classes[0:10000, :, :, :]
+# y_train_indices = shuffled_new_data_labels_3classes[0:10000]
+# x_test = shuffled_new_data_3classes[10001:, :, :, :]
+# y_test_indices = shuffled_new_data_labels_3classes[10001:]
+#
+#
+# # NEW CODE - DATASET MOD - DOWNSAMPLE THE WHOLE DATASET
+# # NEW CODE - DATASET MOD - DOWNSAMPLE THE WHOLE DATASET
+# # NEW CODE - DATASET MOD - DOWNSAMPLE THE WHOLE DATASET
+# # test to determine if smaller test and training datasets resulted in MIA attacks having more variability
+# # hypothesis: smaller datasets means the models have lower losses per epoch,
+# # model learns quicker to fit to data, with limited data. Lower losses result in instable MIA results
+# x_train = x_train[1:301]
+# y_train_indices = y_train_indices[1:301]
+# x_test = x_test[1:201]
+# y_test_indices = y_test_indices[1:201]
+#
+# # # NEW CODE - SHOW THE DATASETS AGAIN
+# # # NEW CODE - SHOW THE DATASETS AGAIN
+# # # NEW CODE - SHOW THE DATASETS AGAIN
+# # # if codeblocks above are uncomments then the dataset is modified to be 3 classes only, and is much smaller,
+# # # multiple orders of magnitude smaller
 # plt.figure(figsize=(10, 10))
 # for i in range(25):
 #     plt.subplot(5, 5, i + 1)
@@ -215,77 +273,21 @@ class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
 #     # which is why you need the extra index
 #     plt.xlabel(class_names[y_train_indices[i][0]])
 # plt.show()
-# NEW CODE - SELECT ONLY SOME LABELS
-num_classes = 3
-# hypothesis: fewer classes makes the MIA test more variable
-train_ind_0 = np.where(y_train_indices == 0)[0]
-train_ind_1 = np.where(y_train_indices == 1)[0]
-train_ind_2 = np.where(y_train_indices == 2)[0]
-# pull out input data using indices for classes defined above.
-# we will discard the validation dataset all together for now
-x_0 = x_train[(train_ind_0), :, :, :]
-x_1 = x_train[(train_ind_1), :, :, :]
-x_2 = x_train[(train_ind_2), :, :, :]
-# pull out labels from the training dataset for the classes we will use only
-train_label_0 = y_train_indices[train_ind_0]
-train_label_1 = y_train_indices[train_ind_1]
-train_label_2 = y_train_indices[train_ind_2]
-# concatenate only the three classes of CIFAR we will use
-new_data_3classes = np.concatenate((x_0, x_1, x_2))
-new_data_labels_3classes = np.concatenate((train_label_0, train_label_1, train_label_2))
-
-shuffled_new_data_3classes, shuffled_new_data_labels_3classes = unison_shuffled_copies(new_data_3classes,
-                                                                                       new_data_labels_3classes)
-# Update variables used in rest of program to point to new 3class dataset
-# there are 5000 examples of each class, there are now three classes meaning we have 15,000 images.
-x_train = shuffled_new_data_3classes[0:10000, :, :, :]
-y_train_indices = shuffled_new_data_labels_3classes[0:10000]
-x_test = shuffled_new_data_3classes[10001:, :, :, :]
-y_test_indices = shuffled_new_data_labels_3classes[10001:]
-
-
-# NEW CODE - DATASET MOD - DOWNSAMPLE THE WHOLE DATASET
-# NEW CODE - DATASET MOD - DOWNSAMPLE THE WHOLE DATASET
-# NEW CODE - DATASET MOD - DOWNSAMPLE THE WHOLE DATASET
-# test to determine if smaller test and training datasets resulted in MIA attacks having more variability
-# hypothesis: smaller datasets means the models have lower losses per epoch,
-# model learns quicker to fit to data, with limited data. Lower losses result in instable MIA results
-x_train = x_train[1:301]
-y_train_indices = y_train_indices[1:301]
-x_test = x_test[1:201]
-y_test_indices = y_test_indices[1:201]
-
-# # NEW CODE - SHOW THE DATASETS AGAIN
-# # NEW CODE - SHOW THE DATASETS AGAIN
-# # NEW CODE - SHOW THE DATASETS AGAIN
-# # if codeblocks above are uncomments then the dataset is modified to be 3 classes only, and is much smaller,
-# # multiple orders of magnitude smaller
-plt.figure(figsize=(10, 10))
-for i in range(25):
-    plt.subplot(5, 5, i + 1)
-    plt.xticks([])
-    plt.yticks([])
-    plt.grid(False)
-    plt.imshow(x_train[i])
-    # The CIFAR labels happen to be arrays,
-    # which is why you need the extra index
-    plt.xlabel(class_names[y_train_indices[i][0]])
-plt.show()
-# CODE BLOCK - repeated from the tutorial without modifications
-# this section is required preprocessing for model training
-# Convert class vectors to binary class matrices.
-# this is only used during the model fit method by keras
-y_train = tf.keras.utils.to_categorical(y_train_indices, num_classes)
-y_test = tf.keras.utils.to_categorical(y_test_indices, num_classes)
-
-# used in the CNN creator method
-input_shape = x_train.shape[1:]
-# mia doesn't support partial batch handling, so this checks if there are any partial batches. otherwise unused
-assert x_train.shape[0] % batch_size == 0, "The tensorflow_privacy optimizer doesn't handle partial batches"
-
-### MODIFYING THE DATASETS
-### MODIFYING THE DATASETS
-### MODIFYING THE DATASETS
+# # CODE BLOCK - repeated from the tutorial without modifications
+# # this section is required preprocessing for model training
+# # Convert class vectors to binary class matrices.
+# # this is only used during the model fit method by keras
+# y_train = tf.keras.utils.to_categorical(y_train_indices, num_classes)
+# y_test = tf.keras.utils.to_categorical(y_test_indices, num_classes)
+#
+# # used in the CNN creator method
+# input_shape = x_train.shape[1:]
+# # mia doesn't support partial batch handling, so this checks if there are any partial batches. otherwise unused
+# assert x_train.shape[0] % batch_size == 0, "The tensorflow_privacy optimizer doesn't handle partial batches"
+#
+# ### MODIFYING THE DATASETS
+# ### MODIFYING THE DATASETS
+# ### MODIFYING THE DATASETS
 
 
 
@@ -364,18 +366,18 @@ history = model_2layers.fit(
 all_reports.extend(callback.attack_results)
 
 
-# # 3 layer depth
-# callback = PrivacyMetrics(epochs_per_report, "3 Layers")
-# history = model_3layers.fit(
-#       x_train,
-#       y_train,
-#       batch_size=batch_size,
-#       epochs=total_epochs,
-#       validation_data=(x_test, y_test),
-#       callbacks=[callback],
-#       shuffle=True)
-#
-# all_reports.extend(callback.attack_results)
+# 3 layer depth
+callback = PrivacyMetrics(epochs_per_report, "3 Layers")
+history = model_3layers.fit(
+      x_train,
+      y_train,
+      batch_size=batch_size,
+      epochs=total_epochs,
+      validation_data=(x_test, y_test),
+      callbacks=[callback],
+      shuffle=True)
+
+all_reports.extend(callback.attack_results)
 
 # append all results to results array
 results = AttackResultsCollection(all_reports)

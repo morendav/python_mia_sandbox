@@ -264,6 +264,17 @@ if __name__ == '__main__':
     model_dense_layers.summary()
     print(f'\n\n')
 
+
+
+
+
+
+
+
+
+
+
+
     # Train Models and run privacy attacks per model
     # call the privacy metrics class as a per training epoch callback
     # Train & Test: Repeated Conv2D
@@ -283,21 +294,29 @@ if __name__ == '__main__':
     # append results to all_reports array
     all_reports.extend(callback.attack_results)
 
-    # # Train & Test: Densely Connected NN
-    # callback = PrivacyMetrics(
-    #     epochs_per_report,  # parameter that signals how often the privacy attacks should be run on the model
-    #     "model_dense_layers"  # model codename internally
-    # )
-    # # write results of model fit (i.e. training) to var(history)
-    # history_model_dense_layers = model_dense_layers.fit(
-    #     train_ds,
-    #     validation_data=val_ds,
-    #     epochs=epochs,
-    #     callbacks=[callback],
-    # )
-    # # append results to all_reports array
-    # all_reports.extend(callback.attack_results)
-    #
+    # Train & Test: Densely Connected NN
+    callback = PrivacyMetrics(
+        epochs_per_report,  # parameter that signals how often the privacy attacks should be run on the model
+        "model_dense_layers"  # model codename internally
+    )
+    # write results of model fit (i.e. training) to var(history)
+    history_model_dense_layers = model_dense_layers.fit(
+        train_ds,
+        validation_data=val_ds,
+        epochs=epochs,
+        callbacks=[callback],
+    )
+    # append results to all_reports array
+    all_reports.extend(callback.attack_results)
+
+
+
+
+
+
+
+
+
 
     # Plot results from privacy testing, extract reports
     results = AttackResultsCollection(all_reports)

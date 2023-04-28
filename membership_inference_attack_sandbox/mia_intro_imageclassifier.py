@@ -46,7 +46,6 @@ from tensorflow.keras.models import Model
 
 import tensorflow_datasets as tf_datasets
 
-
 import tensorflow_privacy
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import membership_inference_attack as mia
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_structures import AttackInputData
@@ -58,10 +57,6 @@ from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_s
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import privacy_report
 
 
-
-
-
-
 # Define MIA helper methods
 # builder methods are used to create models with some arbitrary values for
 # their characteristics (e.g. depth, number of convolutions, etc)
@@ -69,8 +64,11 @@ def conv_nn_builder(input_shape: Tuple[int],
                     num_classes: int,
                     depth: int,
                     neurons_per_layer: int = 64,
-                    activation: str = 'relu') -> tf.keras.models.Sequential:
-    """Build a conv2d model of arbitrary depth
+                    activation: str = 'relu'
+                    ) -> tf.keras.models.Sequential:
+    """
+    Helper Method to build a multi-layered conv2d model of arbitrary depth (depth).
+    The filter size for each conv2D is not parameterized. No padding per layer
 
     Args:
         input_shape: Integer tuple, shape of a sample image. e.g. (64,64,3)
@@ -80,8 +78,6 @@ def conv_nn_builder(input_shape: Tuple[int],
         activation: The activation function to use for conv and dense layers. Default RELU
     Returns:
         TF.Keras compiled model with the parameters passed to this nn builder method
-    Static Values
-        the filter size for each conv2D is not parameterized
     """
     model = Sequential()
     model.add(layers.Input(shape=input_shape))
@@ -107,13 +103,16 @@ def conv_nn_builder(input_shape: Tuple[int],
     )
     return model
 
+
 def dense_nn_builder(input_shape: Tuple[int],
-                    num_classes: int,
-                    depth: int,
-                    neurons_per_layer: int = 64,
-                    activation: str = 'relu',
-                    ) -> tf.keras.models.Sequential:
-    """Build a densely connected NN model of arbitrary depth
+                     num_classes: int,
+                     depth: int,
+                     neurons_per_layer: int = 64,
+                     activation: str = 'relu'
+                     ) -> tf.keras.models.Sequential:
+    """
+    Helper Method to build a multi-layered densely connected NN model of arbitrary depth (depth)
+
 
     Args:
         input_shape: Integer tuple, shape of a sample image. e.g. (64,64,3)
@@ -141,12 +140,16 @@ def dense_nn_builder(input_shape: Tuple[int],
     )
     return model
 
+
 # TODO dont be lazy about returned datatypes here, come back to this later
 def dataset_builder(dataset: dict,
                     num_classes: int = 10,
                     ):
-                    # ) -> tuple[Union[float, Any], Any, Any]:
-    """Build that datasets for use in model training and testing from an input dataset dictionary
+    # ) -> tuple[Union[float, Any], Any, Any]:
+    """
+    Build a model-ready dataset for training and validation from an input dataset dictionary
+    Assumes the dictionary passed is generated from TensorFlow datasets library,
+    and has three keys: [image, label, id].
 
     Args:
         dataset: dict,
@@ -157,14 +160,12 @@ def dataset_builder(dataset: dict,
         ds_labels_training_vector sparse representation of the labels, length number of classes, with 1 nonzero entry
     """
 
-
     # preprocess dataset and extract dataset input, labels, and create a sparse vector
     # representation of the labels for training
     # First, preprocess the images into float typed entries, rescale to support model convergence
     ds_images = dataset['image'].astype('float32') / 255.
     # extract labels from dataset
     ds_labels = dataset['label'][:, np.newaxis]
-
 
     # logic to gate dataset truncation conditionally on whether the passed parameter is not equal to the number
     # of classes the dataset already has
@@ -202,12 +203,14 @@ def dataset_builder(dataset: dict,
 
     return ds_images, ds_labels, ds_labels_training_vector
 
+
 def unison_shuffle_arrays(a, b):
-    """Shuffle two arrays of equal depth
-    Used to shuffle dataset and label vectors after truncation, note that both dataset and labels *must be shuffled
-    in unison* meaning that an element X from dataset and Y from labels must be shuffled to the same new positions within
-    their respective datasets
-    This helper method to dataset builder method
+    """
+    Shuffle two arrays of equal length
+    Used to shuffle dataset and label vectors during truncation, note that both dataset and labels *must be shuffled
+    in unison* meaning that an element X from dataset and element Y from labels must be shuffled to the same
+    new positions within their respective datasets. This helper method to dataset builder method.
+    This will fail if length(a) is not equal to length(b)
 
     Args:
         a: array,
@@ -227,17 +230,25 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
     """
     Run membership inference attacks every E epochs of training
 
-    E is defined as a parameter within the program (see init var section)
+    E is defined as a parameter within the program (see init var section in main)
     This class is interpreted at each epoch of training, however only at every E epochs are the tests done.
     This is handled using modulo (current_epoch modulo epoch_test)
 
     Required data objects from main program include: model, named model (passed in callback method),
     training and validation datasets, as well as labels for training and validation datasets
+
+    Credit here is due in large part to TensorFlow Privacy github for great training and documentation :D
     """
 
-    def __init__(self, epochs_per_report, model_name):
+    def __init__(self, epochs_per_report, model_name, train_input, train_labels_indices, val_input, val_labels_indices):
+        # when initiatlizing class, assign characteristics to the class
         self.epochs_per_report = epochs_per_report
         self.model_name = model_name
+        # these are used for MIA, will be new for each training run
+        self.training_input = train_input
+        self.training_labels_ind = train_labels_indices
+        self.validation_input = val_input
+        self.validation_labels_ind = val_labels_indices
         self.attack_results = []
 
     def on_epoch_end(self, epoch, logs=None):
@@ -248,12 +259,19 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
         if epoch % self.epochs_per_report != 0:
             return
 
-        print(f'\n\nEvaluating model by running an MIA assessment')
+        print(f'\n\nEvaluating model by running an Membership Inference Attack')
         print(f'Callback at training epoch {epoch}\n')
 
-        logits_train = self.model.predict(x_train, batch_size=batch_size)
-        logits_test = self.model.predict(x_test, batch_size=batch_size)
-
+        # capture logits and convert to probabilities by applying softmax function to logits.
+        # Uses class variables for training and validation datasets
+        logits_train = self.model.predict(
+            self.training_input,
+            batch_size=batch_size,
+        )
+        logits_test = self.model.predict(
+            self.validation_input,
+            batch_size=batch_size,
+        )
         prob_train = special.softmax(logits_train, axis=1)
         prob_test = special.softmax(logits_test, axis=1)
 
@@ -272,8 +290,8 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
             AttackInputData(
                 # labels must be passed, and must of dimension (N,1)
                 # preprocessing to configure the labels matrices is done as a preprocessing step within the main program
-                labels_train=y_train_indices[:, 0],
-                labels_test=y_test_indices[:, 0],
+                labels_train=self.training_labels_ind[:, 0],
+                labels_test=self.validation_labels_ind[:, 0],
                 probs_train=prob_train,
                 probs_test=prob_test,
             ),
@@ -291,20 +309,21 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
 
 
 if __name__ == '__main__':
-
     # Init Var
-    all_reports = []  # init an empty array that will store the privacy attack results
+    reports_10class_modelType = []  # data structure to compare model types (Conv2d vs Dense) for the 10class dataset
+    reports_10class_denseModelDepth = []  # data structure to compare model depth for Dense NN model for 10class dataset
+    reports_4class_denseModelDepth = []  # data structure to compare model depth for Dense NN model for 4class dataset
     batch_size = 50  # usually one of 32, 64, 128, ...
     epochs = 3
+    epochs_range = range(epochs)  # used for plotting figures later, assumes all models are trained for E epochs
     epochs_per_report = 2  # how often should the privacy attacks be performed
     learning_rate = 0.001
-
-
+    # Init directory variables
+    current_directory = Path(os.path.dirname(os.path.abspath(__file__)))
     # Init dataset metadata
     dataset = 'cifar10'
     num_classes = 10
     class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
-
 
     # CIFAR as numpy dict datatype, with three keys (id, image, label)
     # TF datasets come presplit, in this case CIFAR has 10k, 50k validation, test split
@@ -323,9 +342,10 @@ if __name__ == '__main__':
         )
     )
 
-
     # Create training and test datasets with 10 (default number) of classes
     # use the dataset_builder helper method to create the training and validation datasets
+    # x_indices variables are used for MIA callbacks
+    # x_x and x_y arrays are images and sparse vector labels respectively
     train_10_x, train_10_y_indices, train_10_y = dataset_builder(
         dataset=train_ds,
     )
@@ -346,7 +366,6 @@ if __name__ == '__main__':
     # MIA tensorflow privacy library does not handle partial batches
     assert train_10_x.shape[0] % batch_size == 0, "10Class partial batch, error in tensorflow_privacy optimizer"
     assert train_4_x.shape[0] % batch_size == 0, "4Class partial batch, error in tensorflow_privacy optimizer"
-
 
     # Generate the compiled models
     # First, generate two different types of models to compare MIA across model types
@@ -374,7 +393,7 @@ if __name__ == '__main__':
         activation='relu',
     )
     # Finally, recreate the baseline models that will fit to the three class dataset
-    conv_3layer_4label = conv_nn_builder(
+    dense_6layer_4label = dense_nn_builder(
         input_shape=train_10_x.shape[1:],
         num_classes=4,
         neurons_per_layer=32,
@@ -391,15 +410,45 @@ if __name__ == '__main__':
 
 
 
-    # Train Models and run privacy attacks per model
-    # call the privacy metrics class as a per training epoch callback
-    # Train & Test: Repeated Conv2D
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## TODO - start here and check line by line / block by block
+    # then add to the graph utils
+
+
+    # Train Models and run MIA while doing so via a callback
+    # build comparison between model types for 10class dataset, start with conv2d model and proceed to dense nn model
+    # train and append MIA report for 10class dense NN 3  layer
     callback = PrivacyMetrics(
-        epochs_per_report,  # parameter that signals how often the privacy attacks should be run on the model
-        "test"  # model codename internally
+        epochs_per_report=epochs_per_report,
+        model_name="denseNN_3layer",
+        train_input=train_10_x,
+        train_labels_indices=train_10_y_indices,
+        val_input=validation_10_x,
+        val_labels_indices=validation_10_y_indices,
     )
-    # write results of model fit (i.e. training) to var(history)
-    history_model_repeated_conv2d = conv_3layer_10label.fit(
+    history_10class_modelType_dense = dense_3layer_10label.fit(
         train_10_x,
         train_10_y,
         batch_size=batch_size,
@@ -407,53 +456,97 @@ if __name__ == '__main__':
         epochs=epochs,
         callbacks=[callback],
     )
-    # append results to all_reports array
-    all_reports.extend(callback.attack_results)
-
-    # # Train & Test: Densely Connected NN
-    # callback = PrivacyMetrics(
-    #     epochs_per_report,  # parameter that signals how often the privacy attacks should be run on the model
-    #     "model_dense_layers"  # model codename internally
-    # )
-    # # write results of model fit (i.e. training) to var(history)
-    # history_model_dense_layers = model_dense_layers.fit(
-    #     train_ds,
-    #     validation_data=val_ds,
-    #     epochs=epochs,
-    #     callbacks=[callback],
-    # )
-    # # append results to all_reports array
-    # all_reports.extend(callback.attack_results)
-    #
-
-    # Plot results from privacy testing, extract reports
-    results = AttackResultsCollection(all_reports)
-    privacy_metrics = (PrivacyMetric.AUC, PrivacyMetric.ATTACKER_ADVANTAGE)
-    # plotting makes use of built in privacy testing plot method (from imported library)
-    # documentation found in: github.com/tensorflow/privacy/blob/master/tensorflow_privacy/privacy/privacy_tests/membership_inference_attack/privacy_report.py
-    epoch_plot = privacy_report.plot_by_epochs(
-        results,
-        privacy_metrics=privacy_metrics
+    reports_10class_modelType.extend(callback.attack_results)  # add results to the model type 10class dataset results
+    reports_10class_denseModelDepth.extend(callback.attack_results)  # add results to the model depth 10c dataset result
+    # train and append MIA report for 10class conv2d 3  layer
+    callback = PrivacyMetrics(
+        epochs_per_report=epochs_per_report,  # signals how often the privacy attacks should be run on the model
+        model_name="conv2d_3layer",  # model codename internally
+        train_input=train_10_x,
+        train_labels_indices=train_10_y_indices,
+        val_input=validation_10_x,
+        val_labels_indices=validation_10_y_indices,
     )
-    epoch_plot.savefig(current_directory / 'membership_inference_attack_perEpoch.png')
+    # write history at each epoch to variable for this model, history is named according to model being trained
+    history_10class_modelType_conv2d = conv_3layer_10label.fit(
+        train_10_x,
+        train_10_y,
+        batch_size=batch_size,
+        validation_data=(validation_10_x, validation_10_y),
+        epochs=epochs,
+        callbacks=[callback],
+    )
+    reports_10class_modelType.extend(callback.attack_results)  # build comparison for 10class model types
 
-    # Plot sample images from training dataset
-    # plt.figure(figsize=(10, 10))
-    # for images, labels in train_ds.take(1):
-    #     for i in range(9):
-    #         ax = plt.subplot(3, 3, i + 1)
-    #         plt.imshow(images[i].numpy().astype("uint8"))
-    #         plt.title(class_names[labels[i]])
-    #         plt.axis("off")
-    # plt.savefig(current_directory / 'sample_training_data_xrays.png')
-    # plt.show()
+    # build comparison between model depths for the 10class dataset, for dense NN of depth 3 and 6
+    # train and append MIA report for 10class dense 6layer depth model
+    callback = PrivacyMetrics(
+        epochs_per_report=epochs_per_report,
+        model_name="denseNN_6layer",
+        train_input=train_10_x,
+        train_labels_indices=train_10_y_indices,
+        val_input=validation_10_x,
+        val_labels_indices=validation_10_y_indices,
+    )
+    history_10class_modelType_dense6L = dense_6layer_10label.fit(
+        train_10_x,
+        train_10_y,
+        batch_size=batch_size,
+        validation_data=(validation_10_x, validation_10_y),
+        epochs=epochs,
+        callbacks=[callback],
+    )
+    reports_10class_denseModelDepth.extend(callback.attack_results)
 
-    epochs_range = range(epochs)
+    # build comparison between model depth for 4class datasets
+    # train and append MIA report for 4class 3layer dense NN
+    callback = PrivacyMetrics(
+        epochs_per_report=epochs_per_report,
+        model_name="4c_denseNN_3layer",
+        train_input=train_4_x,
+        train_labels_indices=train_4_y_indices,
+        val_input=validation_4_x,
+        val_labels_indices=validation_4_y_indices,
+    )
+    history_4class_depth_3layer = dense_3layer_4label.fit(
+        train_4_x,
+        train_4_y,
+        batch_size=batch_size,
+        validation_data=(validation_4_x, validation_4_y),
+        epochs=epochs,
+        callbacks=[callback],
+    )
+    reports_4class_denseModelDepth.extend(callback.attack_results)
+    # train and append MIA report for 10class conv2d 3  layer
+    callback = PrivacyMetrics(
+        epochs_per_report=epochs_per_report,
+        model_name="4c_denseNN_6layer",
+        train_input=train_4_x,
+        train_labels_indices=train_4_y_indices,
+        val_input=validation_4_x,
+        val_labels_indices=validation_4_y_indices,
+    )
+    history_4class_depth_6layer = dense_6layer_4label.fit(
+        train_4_x,
+        train_4_y,
+        batch_size=batch_size,
+        validation_data=(validation_4_x, validation_4_y),
+        epochs=epochs,
+        callbacks=[callback],
+    )
+    reports_4class_denseModelDepth.extend(callback.attack_results)  # build comparison for 10class model types
+
+
+
+
+
+    # Create side by side plots of model training accuracy and loss per epoch, save figures
+    # SxS for model type comparison, 10class dataset
     # Pull accuracy and loss per epoch from history, plot them for 2DConv
-    conv2D_acc = history_model_repeated_conv2d.history['accuracy']
-    conv2D_val_acc = history_model_repeated_conv2d.history['val_accuracy']
-    conv2D_loss = history_model_repeated_conv2d.history['loss']
-    conv2D_val_loss = history_model_repeated_conv2d.history['val_loss']
+    10c_3l_conv2D_acc = history_10class_modelType_conv2d.history['accuracy']
+    10c_3l_conv2D_val_acc = history_10class_modelType_conv2d.history['val_accuracy']
+    10c_3l_dense_acc = history_10class_modelType_conv2d.history['accuracy']
+    10c_3l_dense_val_acc = history_10class_modelType_conv2d.history['val_accuracy']
     plt.figure(figsize=(8, 8))
     plt.subplot(2, 2, 1)
     plt.plot(epochs_range, conv2D_acc, label='Training Accuracy')
@@ -462,28 +555,9 @@ if __name__ == '__main__':
     plt.title('Conv2d Model Accuracy')
 
     plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, conv2D_loss, label='Training Loss')
-    plt.plot(epochs_range, conv2D_val_loss, label='Validation Loss')
-    plt.legend(loc='upper right')
-    plt.title('Conv2d Model Loss')
+    plt.plot(epochs_range, conv2D_acc, label='Training Accuracy')
+    plt.plot(epochs_range, conv2D_val_acc, label='Validation Accuracy')
+    plt.legend(loc='lower right')
+    plt.title('Conv2d Model Accuracy')
     # plt.savefig(current_directory / 'conv2d_model_training_validation_accuracy.png')
     # plt.show()
-
-    # # Pull accuracy and loss per epoch from history, plot them for multi-layered dense NN
-    # dense_acc = history_model_dense_layers.history['accuracy']
-    # dense_val_acc = history_model_dense_layers.history['val_accuracy']
-    # dense_loss = history_model_dense_layers.history['loss']
-    # dense_val_loss = history_model_dense_layers.history['val_loss']
-    # plt.subplot(2, 2, 3)
-    # plt.plot(epochs_range, dense_acc, label='Training Accuracy')
-    # plt.plot(epochs_range, dense_val_acc, label='Validation Accuracy')
-    # plt.legend(loc='lower right')
-    # plt.title('Dense NN Accuracy')
-    #
-    # plt.subplot(2, 2, 4)
-    # plt.plot(epochs_range, dense_loss, label='Training Loss')
-    # plt.plot(epochs_range, dense_val_loss, label='Validation Loss')
-    # plt.legend(loc='upper right')
-    # plt.title('Dense NN Loss')
-    plt.savefig(current_directory / 'model_training_validation_accuracy_loss.png')
-    plt.show()
