@@ -2,23 +2,29 @@
 Introduction to Membership Inference Attack - Privacy testing for ML Models
 Version 2.1
     * see mia sandbox > ... > mia_intro_image_class.py for original WIP version
-    * improvements over 1.1 (WIP) include builder methods, and a method to slice training data into M of N classes
+    * improvements over 1.1 (WIP) include model builder methods, and a method to slice training data into M of N classes
 
-This intro will go over building two image classification models with different architectures
-Perform MIA tests on both models every N epochs.
-Both models are trained over enough epochs to demonstrate overfitting
+This intro will perform an MIA privacy analysis on models of various architectures and sizes, as well as the number of
+classes in the source training/validation datasets
+Training accuracy and loss vs validation accuracy and loss will be shown plotted over epochs in model training
+Over the total number of epochs all models are expected to overfit to the training dataset
 
-The expected result should show:
+The expected results should show:
 1. Models overfit as the number of epochs increases
 2. Different models, with different architectures and different capacities, overfit at different rates
-3. Overfitting is a proxy for model memorization, which should show that MIA analysis
-shows greater attacker advantage for over fit models
+3. Overfitting and model memorization measurements are covaried
 
-This script assumes the source data is located relative to the script as it is in the github repo
-Note: a few #todo: for time-of-execution improvements
+The experiments are run on three basis of comparison
+1. Using a 10class dataset, two models of equal depth but different architecture (Convolutional vs Dense) are tested
+2. Using the same 10class dataset, two Dense neural net models of different depths are tested (6+1 vs 3+1) layers
+   * NOTE: model builder methods add an additional layer between output layer and for _ in range loop, thus N+1 layers
+3. Using a downsampling of the 10class to use only the first 4 classes. Models from comparison 1 are recreated
+   * NOTE: the method for dataset truncation is lazy, does not do a random sampling instead just picks the first N of M
+
+Dataset credit: kudos to TF public dataset CIFAR10
 
 Copyright (c) 2023, d.l.moreno
-All rights reserved.
+All rights reserved
 
 This source code is licensed under the Apache v2 license found in the
 LICENSE file in the root directory of this source tree.
@@ -29,24 +35,14 @@ from typing import Tuple, Union, Any
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
-from numpy import ndarray
 from scipy import special
 from pathlib import Path
 
-# Import tensorflow and tensorflow privacy libraries and utilities
+# Import tensorflow, tf datasetss, and tensorflow privacy libraries and utilities
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers.experimental import preprocessing
-from tensorflow.keras.applications.vgg19 import VGG19
-from tensorflow.keras.applications.vgg19 import preprocess_input
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.models import Model
-
 import tensorflow_datasets as tf_datasets
-
-import tensorflow_privacy
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import membership_inference_attack as mia
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_structures import AttackInputData
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_structures import AttackResultsCollection
@@ -56,16 +52,14 @@ from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_s
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack.data_structures import SlicingSpec
 from tensorflow_privacy.privacy.privacy_tests.membership_inference_attack import privacy_report
 
-
-# Set verbosity.
+# Set verbosity
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 from sklearn.exceptions import ConvergenceWarning
-
+# suppress convergence warnings for the logistic regression MIA
 import warnings
+
 warnings.simplefilter(action="ignore", category=ConvergenceWarning)
 warnings.simplefilter(action="ignore", category=FutureWarning)
-
-
 
 
 # Define MIA helper methods
@@ -272,7 +266,7 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
         if epoch % self.epochs_per_report != 0:
             return
 
-        print(f'\n\nEvaluating model by running an Membership Inference Attack')
+        print(f'\n\nEvaluating model by running a Membership Inference Attack')
         print(f'Callback at training epoch {epoch}\n')
 
         # capture logits and convert to probabilities by applying softmax function to logits.
@@ -327,12 +321,11 @@ if __name__ == '__main__':
     reports_10class_modelType = []  # data structure to compare model types (Conv2d vs Dense) for the 10class dataset
     reports_10class_denseModelDepth = []  # data structure to compare model depth for Dense NN model for 10class dataset
     reports_4class_denseModelDepth = []  # data structure to compare model depth for Dense NN model for 4class dataset
-    batch_size = 50  # usually one of 32, 64, 128, ...
-    epochs = 6  # TODO adjust to a higher number
+    batch_size = 50  # usually one of 32, 64, 128, ... dataset sample count must be entirely divisible by batch size
+    epochs = 24  # total number of epochs the experiment will run for
     epochs_range = range(epochs)  # used for plotting figures later, assumes all models are trained for E epochs
-    epochs_per_report = 2  # how often should the privacy attacks be performed
-    # TODO adjust epochs_per_report to lower number to make more datapoints
-    learning_rate = 0.001
+    epochs_per_report = 3  # how often should the privacy attacks be performed
+    learning_rate = 0.001  # hyperparameter for all models
     # Init directory variables
     current_directory = Path(os.path.dirname(os.path.abspath(__file__)))
     # Init dataset metadata
@@ -383,8 +376,8 @@ if __name__ == '__main__':
     assert train_4_x.shape[0] % batch_size == 0, "4Class partial batch, error in tensorflow_privacy optimizer"
 
     # Generate the compiled models
-    # First, generate two different types of models to compare MIA across model types
-    # these models serve as the baseline for comparison
+    # Experiment: Model Type trained on 10class dataset
+    # generate two different types of models to compare MIA across Convolutional NN and Dense NN
     conv_3layer_10label = conv_nn_builder(
         input_shape=train_10_x.shape[1:],
         num_classes=10,
@@ -399,7 +392,9 @@ if __name__ == '__main__':
         depth=3,
         activation='relu',
     )
-    # Next, define an additional densely connected neural network that is much deeper for comparison
+
+    # Experiment: Model Depth trained on 10class dataset. Both models are Dense NN
+    # Note, the 3+1 depth model was created for experiment 1, this will not be recreated again
     dense_6layer_10label = dense_nn_builder(
         input_shape=train_10_x.shape[1:],
         num_classes=10,
@@ -407,7 +402,9 @@ if __name__ == '__main__':
         depth=6,
         activation='relu',
     )
-    # Finally, recreate the baseline models that will fit to the three class dataset
+
+    # Experiment: Compare Experiment 1 models trained on a 4 class dataset (4 first classes from 10class dataset)
+    # these models cannot be reused from experiment 1 because we need 4 logtis here instead of 10 from experiment 1
     dense_6layer_4label = dense_nn_builder(
         input_shape=train_4_x.shape[1:],
         num_classes=4,
@@ -430,21 +427,6 @@ if __name__ == '__main__':
     dense_6layer_4label.summary()
     dense_3layer_4label.summary()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # Train Models and run MIA while doing so via a callback
     print(f'\n\nTrain models and test at frequency: every {epochs_per_report} epoch ]\n')
     # build comparison between model types for 10class dataset, start with conv2d model and proceed to dense nn model
@@ -457,7 +439,7 @@ if __name__ == '__main__':
         val_input=validation_10_x,
         val_labels_indices=validation_10_y_indices,
     )
-    # naming convention: history_(number of classes)_(which comparison)_(within comparison, which element)
+    # naming convention: history_(number of classes)_(which experiment)_(which variable)
     history_10class_modelType_dense = dense_3layer_10label.fit(
         train_10_x,
         train_10_y,
@@ -545,144 +527,143 @@ if __name__ == '__main__':
     )
     reports_4class_denseModelDepth.extend(callback.attack_results)
 
-
-
-
-
+    # Generate plots for experiment result visualization & demo sampling of the datasets
     # Report MIA results for model experiments
     privacy_metrics = (PrivacyMetric.AUC, PrivacyMetric.ATTACKER_ADVANTAGE)  # define report types for all experiments
 
     # Sxs Reporting - Model Type experiments
     # Model loss/accuracy vs epoch, model MIA results vs epoch. 10class dataset, dense vs conv2d
-    # Pull accuracy and loss per epoch from history
-    compModel_conv2D_acc = history_10class_modelType_conv2d.history['accuracy']
-    compModel_conv2D_val_acc = history_10class_modelType_conv2d.history['val_accuracy']
-    compModel_conv2D_loss = history_10class_modelType_conv2d.history['loss']
-    compModel_conv2D_val_loss = history_10class_modelType_conv2d.history['val_loss']
-    compModel_dense_acc = history_10class_modelType_dense.history['accuracy']
-    compModel_dense_val_acc = history_10class_modelType_dense.history['val_accuracy']
-    compModel_dense_loss = history_10class_modelType_dense.history['loss']
-    compModel_dense_val_loss = history_10class_modelType_dense.history['val_loss']
     # Plot MIA results
-    compModel_results = AttackResultsCollection(reports_10class_modelType)
+    expModel_results = AttackResultsCollection(reports_10class_modelType)
     # plotting makes use of built in privacy testing plot method (from imported library)
     # documentation found in: github.com/tensorflow/privacy/blob/master/tensorflow_privacy/privacy/privacy_tests/membership_inference_attack/privacy_report.py
     epoch_plot = privacy_report.plot_by_epochs(
-        compModel_results,
+        expModel_results,
         privacy_metrics=privacy_metrics
     )
-    epoch_plot.savefig(current_directory / 'compModel_mia_results.png')
+    epoch_plot.savefig(current_directory / 'expModel_mia_results.png')
     # Plot model training accuracy & loss vs training epoch
     plt.figure(figsize=(8, 8))
     plt.subplot(2, 2, 1)
-    plt.plot(epochs_range, compModel_conv2D_acc, label='Training Accuracy')
-    plt.plot(epochs_range, compModel_conv2D_val_acc, label='Validation Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['accuracy'], label='Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['val_accuracy'], label='Validation Accuracy')
     plt.legend(loc='lower right')
     plt.title('Conv Accuracy, 10c3l')
     plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, compModel_conv2D_loss, label='Training Loss')
-    plt.plot(epochs_range, compModel_conv2D_val_loss, label='Validation Loss')
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['loss'], label='Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['val_loss'], label='Validation Loss')
     plt.legend(loc='upper right')
     plt.title('Conv Loss, 10c3l')
     # Plot model training accuracy & loss vs training epoch
     plt.subplot(2, 2, 3)
-    plt.plot(epochs_range, compModel_dense_acc, label='Training Accuracy')
-    plt.plot(epochs_range, compModel_dense_val_acc, label='Validation Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['accuracy'], label='Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_accuracy'], label='Validation Accuracy')
     plt.legend(loc='lower right')
-    plt.title('Dense NN Accuracy, 4c3l')
+    plt.title('Dense NN Accuracy, 10c3l')
 
     plt.subplot(2, 2, 4)
-    plt.plot(epochs_range, compModel_dense_loss, label='Training Loss')
-    plt.plot(epochs_range, compModel_dense_val_loss, label='Validation Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['loss'], label='Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_loss'], label='Validation Loss')
     plt.legend(loc='upper right')
-    plt.title('Dense NN Loss, 4c3l')
-    plt.savefig(current_directory / 'modelTypeComparison_training_accuracy_and_loss.png')
+    plt.title('Dense NN Loss, 10c3l')
+    plt.savefig(current_directory / 'expModel_training_results.png')
     plt.show()
-
 
     # Sxs Reporting - Model Depth, both dense models
     # Model loss/accuracy vs epoch, model MIA results vs epoch. 10class dataset, dense3layer vs dense6layer
-    # note each dense model has an additional layer (see model builder method for dense)
-    # Pull accuracy and loss per epoch from history
-    compDepth6_dense_acc = history_10class_modelType_dense6L.history['accuracy']
-    compDepth6_dense_val_acc = history_10class_modelType_dense6L.history['val_accuracy']
-    compDepth6_dense_loss = history_10class_modelType_dense6L.history['loss']
-    compDepth6_dense_val_loss = history_10class_modelType_dense6L.history['val_loss']
+    # note each dense model has an additional layer, so 6+1 = 7 vs 3+1 =4 (see model builder method for dense)
     # Plot MIA results
-    compDepth6_results = AttackResultsCollection(reports_10class_denseModelDepth)
+    expDepth6_results = AttackResultsCollection(reports_10class_denseModelDepth)
     epoch_plot = privacy_report.plot_by_epochs(
-        compDepth6_results,
+        expDepth6_results,
         privacy_metrics=privacy_metrics
     )
-    epoch_plot.savefig(current_directory / 'compDepth_mia_results.png')
+    epoch_plot.savefig(current_directory / 'expDepth_mia_results.png')
     # Plot model training accuracy & loss vs training epoch
     plt.figure(figsize=(8, 8))
     plt.subplot(2, 2, 1)
-    plt.plot(epochs_range, compDepth6_dense_acc, label='Training Accuracy')
-    plt.plot(epochs_range, compDepth6_dense_val_acc, label='Validation Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['accuracy'], label='Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['val_accuracy'], label='Validation Accuracy')
     plt.legend(loc='lower right')
     plt.title('7layer Dense Accuracy')
     plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, compDepth6_dense_loss, label='Training Loss')
-    plt.plot(epochs_range, compDepth6_dense_val_loss, label='Validation Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['loss'], label='Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['val_loss'], label='Validation Loss')
     plt.legend(loc='upper right')
     plt.title('7layer Dense Loss')
     # Plot model training accuracy & loss vs training epoch
     plt.subplot(2, 2, 3)
-    plt.plot(epochs_range, compModel_dense_acc, label='Training Accuracy')
-    plt.plot(epochs_range, compModel_dense_val_acc, label='Validation Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['accuracy'], label='Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_accuracy'], label='Validation Accuracy')
     plt.legend(loc='lower right')
     plt.title('4layer Dense Accuracy')
-
     plt.subplot(2, 2, 4)
-    plt.plot(epochs_range, compModel_dense_loss, label='Training Loss')
-    plt.plot(epochs_range, compModel_dense_val_loss, label='Validation Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['loss'], label='Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_loss'], label='Validation Loss')
     plt.legend(loc='upper right')
     plt.title('4layer Dense Loss')
-    plt.savefig(current_directory / 'modelTypeComparison_training_accuracy_and_loss.png')
+    plt.savefig(current_directory / 'expDepth_training_results.png')
     plt.show()
 
     # Sxs Reporting - 4class dataset, model type experiments
     # Model loss/accuracy vs epoch, model MIA results vs epoch. 4class dataset, dense3layer vs conv2d 3 layer
-    # Pull accuracy and loss per epoch from history
-    comp4class_conv2D_acc = history_4class_depth_3layer.history['accuracy']
-    comp4class_conv2D_val_acc = history_4class_depth_3layer.history['val_accuracy']
-    comp4class_conv2D_loss = history_4class_depth_3layer.history['loss']
-    comp4class_conv2D_val_loss = history_4class_depth_3layer.history['val_loss']
-    comp4class_dense_acc = history_4class_depth_6layer.history['accuracy']
-    comp4class_dense_val_acc = history_4class_depth_6layer.history['val_accuracy']
-    comp4class_dense_loss = history_4class_depth_6layer.history['loss']
-    comp4class_dense_val_loss = history_4class_depth_6layer.history['val_loss']
     # Plot MIA results
-    comp4class_results = AttackResultsCollection(reports_4class_denseModelDepth)
+    exp4class_results = AttackResultsCollection(reports_4class_denseModelDepth)
     epoch_plot = privacy_report.plot_by_epochs(
-        comp4class_results,
+        exp4class_results,
         privacy_metrics=privacy_metrics
     )
-    epoch_plot.savefig(current_directory / 'comp4class_mia_results.png')
+    epoch_plot.savefig(current_directory / 'exp4Class_mia_results.png')
     # Plot model training accuracy & loss vs training epoch
     plt.figure(figsize=(8, 8))
     plt.subplot(2, 2, 1)
-    plt.plot(epochs_range, comp4class_conv2D_acc, label='Training Accuracy')
-    plt.plot(epochs_range, comp4class_conv2D_val_acc, label='Validation Accuracy')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['accuracy'], label='Training Accuracy')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['val_accuracy'], label='Validation Accuracy')
     plt.legend(loc='lower right')
     plt.title('Conv Accuracy, 4c3l')
     plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, comp4class_conv2D_loss, label='Training Loss')
-    plt.plot(epochs_range, comp4class_conv2D_val_loss, label='Validation Loss')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['loss'], label='Training Loss')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['val_loss'], label='Validation Loss')
     plt.legend(loc='upper right')
     plt.title('Conv Loss, 4c3l')
     # Plot model training accuracy & loss vs training epoch
     plt.subplot(2, 2, 3)
-    plt.plot(epochs_range, comp4class_dense_acc, label='Training Accuracy')
-    plt.plot(epochs_range, comp4class_dense_val_acc, label='Validation Accuracy')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['accuracy'], label='Training Accuracy')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['val_accuracy'], label='Validation Accuracy')
     plt.legend(loc='lower right')
     plt.title('Dense Accuracy, 4c3l')
 
     plt.subplot(2, 2, 4)
-    plt.plot(epochs_range, comp4class_dense_loss, label='Training Loss')
-    plt.plot(epochs_range, comp4class_dense_val_loss, label='Validation Loss')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['loss'], label='Training Loss')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['val_loss'], label='Validation Loss')
     plt.legend(loc='upper right')
     plt.title('Dense Loss, 4c3l')
-    plt.savefig(current_directory / 'modelTypeComparison_training_accuracy_and_loss.png')
+    plt.savefig(current_directory / 'exp4Class_training_results.png')
     plt.show()
+
+    # plot sampling of the 10-class dataset
+    plt.figure(figsize=(10, 10))
+    for i in range(25):
+        plt.subplot(5, 5, i + 1)
+        plt.xticks([])
+        plt.yticks([])
+        plt.grid(False)
+        plt.imshow(train_10_x[i])
+        # The CIFAR labels happen to be arrays,
+        # which is why you need the extra index
+        plt.xlabel(class_names[train_10_y_indices[i][0]])
+    plt.show()
+    plt.savefig(current_directory / 'dataset_10class_cifar.png')
+    # plot sampling of the 4-class dataset
+    plt.figure(figsize=(10, 10))
+    for i in range(25):
+        plt.subplot(5, 5, i + 1)
+        plt.xticks([])
+        plt.yticks([])
+        plt.grid(False)
+        plt.imshow(train_4_x[i])
+        # The CIFAR labels happen to be arrays,
+        # which is why you need the extra index
+        plt.xlabel(class_names[train_4_y_indices[i][0]])
+    plt.show()
+    plt.savefig(current_directory / 'dataset_4class_cifar.png')
