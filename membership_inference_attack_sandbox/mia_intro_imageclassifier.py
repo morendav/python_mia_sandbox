@@ -630,8 +630,8 @@ if __name__ == '__main__':
         # The CIFAR labels happen to be arrays,
         # which is why you need the extra index
         plt.xlabel(class_names[train_10_y_indices[i][0]])
-    plt.show()
     plt.savefig(current_directory / 'dataset_10class_cifar.png')
+    plt.show()
     # plot sampling of the 4-class dataset
     plt.figure(figsize=(10, 10))
     for i in range(25):
@@ -643,5 +643,5 @@ if __name__ == '__main__':
         # The CIFAR labels happen to be arrays,
         # which is why you need the extra index
         plt.xlabel(class_names[train_4_y_indices[i][0]])
-    plt.show()
     plt.savefig(current_directory / 'dataset_4class_cifar.png')
+    plt.show()
