@@ -322,7 +322,7 @@ if __name__ == '__main__':
     reports_10class_denseModelDepth = []  # data structure to compare model depth for Dense NN model for 10class dataset
     reports_4class_denseModelDepth = []  # data structure to compare model depth for Dense NN model for 4class dataset
     batch_size = 50  # usually one of 32, 64, 128, ... dataset sample count must be entirely divisible by batch size
-    epochs = 2  # total number of epochs the experiment will run for
+    epochs = 30  # total number of epochs the experiment will run for
     epochs_range = range(epochs)  # used for plotting figures later, assumes all models are trained for E epochs
     epochs_per_report = 2  # how often should the privacy attacks be performed
     learning_rate = 0.001  # hyperparameter for all models
@@ -611,7 +611,7 @@ if __name__ == '__main__':
     plt.title('4Class Accuracy')
     plt.subplot(2, 2, 2)
     plt.plot(epochs_range, history_4class_depth_3layer.history['loss'], color='blue', label='4Layer Train')
-    plt.plot(epochs_range, history_4class_depth_3layer.history['val_loss'], lcolor='black', abel='4Layer Val')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['val_loss'], color='black', label='4Layer Val')
     plt.plot(epochs_range, history_4class_depth_6layer.history['loss'], color='blue', linestyle='dashed', label='7Layer Train')
     plt.plot(epochs_range, history_4class_depth_6layer.history['val_loss'], color='black', linestyle='dashed', label='7Layer Val')
     plt.legend(loc='upper right')
