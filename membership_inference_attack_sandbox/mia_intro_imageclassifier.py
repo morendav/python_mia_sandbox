@@ -18,7 +18,7 @@ The experiments are run on three basis of comparison
 1. Using a 10class dataset, two models of equal depth but different architecture (Convolutional vs Dense) are tested
 2. Using the same 10class dataset, two Dense neural net models of different depths are tested (6+1 vs 3+1) layers
    * NOTE: model builder methods add an additional layer between output layer and for _ in range loop, thus N+1 layers
-3. Using a downsampling of the 10class to use only the first 4 classes. Models from comparison 1 are recreated
+3. Using a downsampling of the 10class to use only the first 4 classes. Models from experiment 2 are recreated
    * NOTE: the method for dataset truncation is lazy, does not do a random sampling instead just picks the first N of M
 
 Dataset credit: kudos to TF public dataset CIFAR10
@@ -536,37 +536,30 @@ if __name__ == '__main__':
     # Plot MIA results
     expModel_results = AttackResultsCollection(reports_10class_modelType)
     # plotting makes use of built in privacy testing plot method (from imported library)
-    # documentation found in: github.com/tensorflow/privacy/blob/master/tensorflow_privacy/privacy/privacy_tests/membership_inference_attack/privacy_report.py
+    # documentation found in:
+    # github.com/tensorflow/privacy/blob/master/tensorflow_privacy/privacy/privacy_tests/membership_inference_attack/privacy_report.py
     epoch_plot = privacy_report.plot_by_epochs(
         expModel_results,
         privacy_metrics=privacy_metrics
     )
-    epoch_plot.savefig(current_directory / 'expModel_mia_results.png')
+    epoch_plot.savefig(current_directory / 'expModelType_mia_results.png')
     # Plot model training accuracy & loss vs training epoch
-    plt.figure(figsize=(8, 8))
-    plt.subplot(2, 2, 1)
-    plt.plot(epochs_range, history_10class_modelType_conv2d.history['accuracy'], label='Training Accuracy')
-    plt.plot(epochs_range, history_10class_modelType_conv2d.history['val_accuracy'], label='Validation Accuracy')
+    plt.figure(figsize=(8, 4))
+    plt.subplot(2, 1, 1)
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['accuracy'], label='Conv Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['val_accuracy'], label='Conv Validation Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['accuracy'], label='Dense Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_accuracy'], label='Dense Validation Accuracy')
     plt.legend(loc='lower right')
-    plt.title('Conv Accuracy, 10c3l')
-    plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, history_10class_modelType_conv2d.history['loss'], label='Training Loss')
-    plt.plot(epochs_range, history_10class_modelType_conv2d.history['val_loss'], label='Validation Loss')
+    plt.title('ModelType Experiment Accuracy, 10c3l')
+    plt.subplot(2, 1, 2)
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['loss'], label='Conv Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_conv2d.history['val_loss'], label='Conv Validation Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['loss'], label='Dense Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_loss'], label='Dense Validation Loss')
     plt.legend(loc='upper right')
-    plt.title('Conv Loss, 10c3l')
-    # Plot model training accuracy & loss vs training epoch
-    plt.subplot(2, 2, 3)
-    plt.plot(epochs_range, history_10class_modelType_dense.history['accuracy'], label='Training Accuracy')
-    plt.plot(epochs_range, history_10class_modelType_dense.history['val_accuracy'], label='Validation Accuracy')
-    plt.legend(loc='lower right')
-    plt.title('Dense NN Accuracy, 10c3l')
-
-    plt.subplot(2, 2, 4)
-    plt.plot(epochs_range, history_10class_modelType_dense.history['loss'], label='Training Loss')
-    plt.plot(epochs_range, history_10class_modelType_dense.history['val_loss'], label='Validation Loss')
-    plt.legend(loc='upper right')
-    plt.title('Dense NN Loss, 10c3l')
-    plt.savefig(current_directory / 'expModel_training_results.png')
+    plt.title('ModelType Experiment Loss, 10c3l')
+    plt.savefig(current_directory / 'expModelType_training_results.png')
     plt.show()
 
     # Sxs Reporting - Model Depth, both dense models
@@ -580,28 +573,21 @@ if __name__ == '__main__':
     )
     epoch_plot.savefig(current_directory / 'expDepth_mia_results.png')
     # Plot model training accuracy & loss vs training epoch
-    plt.figure(figsize=(8, 8))
-    plt.subplot(2, 2, 1)
-    plt.plot(epochs_range, history_10class_modelType_dense6L.history['accuracy'], label='Training Accuracy')
-    plt.plot(epochs_range, history_10class_modelType_dense6L.history['val_accuracy'], label='Validation Accuracy')
+    plt.figure(figsize=(8, 4))
+    plt.subplot(2, 1, 1)
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['accuracy'], label='7Layer Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['val_accuracy'], label='7Layer Validation Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['accuracy'], label='4Layer Training Accuracy')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_accuracy'], label='4Layer Validation Accuracy')
     plt.legend(loc='lower right')
-    plt.title('7layer Dense Accuracy')
-    plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, history_10class_modelType_dense6L.history['loss'], label='Training Loss')
-    plt.plot(epochs_range, history_10class_modelType_dense6L.history['val_loss'], label='Validation Loss')
+    plt.title('ModelDepth Experiment Accuracy')
+    plt.subplot(2, 1, 2)
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['loss'], label='7Layer Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense6L.history['val_loss'], label='7Layer Validation Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['loss'], label='4Layer Training Loss')
+    plt.plot(epochs_range, history_10class_modelType_dense.history['val_loss'], label='4Layer Validation Loss')
     plt.legend(loc='upper right')
-    plt.title('7layer Dense Loss')
-    # Plot model training accuracy & loss vs training epoch
-    plt.subplot(2, 2, 3)
-    plt.plot(epochs_range, history_10class_modelType_dense.history['accuracy'], label='Training Accuracy')
-    plt.plot(epochs_range, history_10class_modelType_dense.history['val_accuracy'], label='Validation Accuracy')
-    plt.legend(loc='lower right')
-    plt.title('4layer Dense Accuracy')
-    plt.subplot(2, 2, 4)
-    plt.plot(epochs_range, history_10class_modelType_dense.history['loss'], label='Training Loss')
-    plt.plot(epochs_range, history_10class_modelType_dense.history['val_loss'], label='Validation Loss')
-    plt.legend(loc='upper right')
-    plt.title('4layer Dense Loss')
+    plt.title('ModelDepth Experiment Loss')
     plt.savefig(current_directory / 'expDepth_training_results.png')
     plt.show()
 
@@ -615,29 +601,21 @@ if __name__ == '__main__':
     )
     epoch_plot.savefig(current_directory / 'exp4Class_mia_results.png')
     # Plot model training accuracy & loss vs training epoch
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 4))
     plt.subplot(2, 2, 1)
-    plt.plot(epochs_range, history_4class_depth_3layer.history['accuracy'], label='Training Accuracy')
-    plt.plot(epochs_range, history_4class_depth_3layer.history['val_accuracy'], label='Validation Accuracy')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['accuracy'], label='4Layer Training Accuracy')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['val_accuracy'], label='4Layer Validation Accuracy')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['accuracy'], label='7Layer Training Accuracy')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['val_accuracy'], label='7Layer Validation Accuracy')
     plt.legend(loc='lower right')
-    plt.title('Conv Accuracy, 4c3l')
+    plt.title('4Class Experiment Accuracy')
     plt.subplot(2, 2, 2)
-    plt.plot(epochs_range, history_4class_depth_3layer.history['loss'], label='Training Loss')
-    plt.plot(epochs_range, history_4class_depth_3layer.history['val_loss'], label='Validation Loss')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['loss'], label='4Layer Training Loss')
+    plt.plot(epochs_range, history_4class_depth_3layer.history['val_loss'], label='4Layer Validation Loss')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['loss'], label='7Layer Training Loss')
+    plt.plot(epochs_range, history_4class_depth_6layer.history['val_loss'], label='7Layer Validation Loss')
     plt.legend(loc='upper right')
-    plt.title('Conv Loss, 4c3l')
-    # Plot model training accuracy & loss vs training epoch
-    plt.subplot(2, 2, 3)
-    plt.plot(epochs_range, history_4class_depth_6layer.history['accuracy'], label='Training Accuracy')
-    plt.plot(epochs_range, history_4class_depth_6layer.history['val_accuracy'], label='Validation Accuracy')
-    plt.legend(loc='lower right')
-    plt.title('Dense Accuracy, 4c3l')
-
-    plt.subplot(2, 2, 4)
-    plt.plot(epochs_range, history_4class_depth_6layer.history['loss'], label='Training Loss')
-    plt.plot(epochs_range, history_4class_depth_6layer.history['val_loss'], label='Validation Loss')
-    plt.legend(loc='upper right')
-    plt.title('Dense Loss, 4c3l')
+    plt.title('4Class Experiment Loss')
     plt.savefig(current_directory / 'exp4Class_training_results.png')
     plt.show()
 
